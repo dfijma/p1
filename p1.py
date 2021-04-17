@@ -8,86 +8,77 @@ import time
 
 ## parse p1 lines
 
-c = 0
-input = []
+class Parser:
 
+    def __init__(self):
+        self.c = 0
+        self.input = []
 
-def cur():
-    if c < len(input):
-        return input[c]
-    else:
-        return chr(0)
+    def cur(self):
+        if self.c < len(self.input):
+            return self.input[self.c]
+        else:
+            return chr(0)
 
+    def skip(self):
+        self.c = min(self.c + 1, len(self.input))
 
-def skip():
-    global c
-    c = min(c + 1, len(input))
+    def parse_c(self, unit_allowed):
+        start = self.c
+        while not self.cur() in ['(', ')', chr(0), '*']:
+            self.skip()
+        end_val = self.c
+        unit = None
+        if self.cur() == '*':
+            self.skip()
+            start_unit = self.c
+            while not self.cur() in ['(', ')', chr(0)]:
+                self.skip()
+            unit = input[start_unit:self.c]
 
+        if unit_allowed:
+            return self.input[start:end_val], unit
+        else:
+            if unit:
+                raise ValueError("unit not allowed")
+            return self.input[start:end_val]
 
-def parse_c(unit_allowed):
-    global c
-    start = c
-    while not cur() in ['(', ')', chr(0), '*']:
-        skip()
-    end_val = c
-    unit = None
-    if cur() == '*':
-        skip()
-        start_unit = c
-        while not cur() in ['(', ')', chr(0)]:
-            skip()
-        unit = input[start_unit:c]
+    def parse_bracket_c(self):
+        if self.cur() != '(':
+            raise ValueError("( expected")
+        self.skip()
+        val = self.parse_c(True)
+        if self.cur() != ')':
+            raise ValueError(") expected")
+        self.skip()
+        return val
 
-    if unit_allowed:
-        return (input[start:end_val], unit)
-    else:
-        if unit:
-            raise ValueError("unit not allowed")
-        return input[start:end_val]
+    def parse_bracket_list(self):
+        f = self.parse_bracket_c()
+        if self.cur() == chr(0):
+            return [f]
+        else:
+            rest = self.parse_bracket_list()
+            rest.insert(0, f)
+            return rest
 
+    def parse(self, s):
+        self.input = s
+        self.c = 0
+        name = self.parse_c(False)
+        value_list = self.parse_bracket_list()
+        # print(name)
+        # print(value_list)
+        return name, value_list
 
-def parse_bracket_c():
-    if cur() != '(':
-        raise ValueError("( expected")
-    skip()
-    val = parse_c(True)
-    if cur() != ')':
-        raise ValueError(") expected")
-    skip()
-    return val
-
-
-def parse_bracket_list():
-    f = parse_bracket_c()
-    if cur() == chr(0):
-        return [f]
-    else:
-        rest = parse_bracket_list()
-        rest.insert(0, f)
-        return rest
-
-
-def parse(s):
-    global c
-    global input
-    input = s
-    c = 0
-    name = parse_c(False)
-    list = parse_bracket_list()
-    # print(name)
-    # print(list)
-    return (name, list)
-
-
-def parse_lines(lines_read):
-    while True:
-        for lines in lines_read:
-            for line in lines:
-                try:
-                    yield (parse(line))
-                except ValueError:
-                    pass
-
+    def parse_lines(self, lines_read):
+        while True:
+            for lines in lines_read:
+                for line in lines:
+                    try:
+                        yield self.parse(line)
+                    except ValueError:
+                        pass
 
 ##### serial p1 communication
 
@@ -181,7 +172,8 @@ def readouts():
     for name in names:
         vals[name] = None
     lines_read = read_p1()
-    for (name, values) in parse_lines(lines_read):
+    parser = Parser()
+    for (name, values) in parser.parse_lines(lines_read):
         if name in names:
             if len(values) == 1:
                 value = values[0]
@@ -218,16 +210,21 @@ def read_omnik():
 
 ##### main
 
-client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+def run():
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-for t in zip(readouts(), read_omnik()):
-    ps = t[1][0]
-    pr = t[0].get('1-0:2.7.0')
-    pd = t[0].get('1-0:1.7.0')
-    print(t)
-    if pr is not None and pd is not None:
-        pl = pd - pr
-        msg = f"pl={pl} ps={ps}"
-        client.sendto(msg.encode('UTF-8'), ('<broadcast>', 37020))
-    time.sleep(1)
+    for t in zip(readouts(), read_omnik()):
+        ps = t[1][0]
+        pr = t[0].get('1-0:2.7.0')
+        pd = t[0].get('1-0:1.7.0')
+        print(t)
+        if pr is not None and pd is not None:
+            pl = pd - pr
+            msg = f"pl={pl} ps={ps}"
+            client.sendto(msg.encode('UTF-8'), ('<broadcast>', 37020))
+        time.sleep(1)
+
+if __name__ == "__main__":
+    run()
+
