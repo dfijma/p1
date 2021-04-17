@@ -1,27 +1,13 @@
-#!/usr/bin/python3 -u
-
+#! /usr/bin/python3 -u
 
 import socket
 import sys
 import serial
-import re
 from urllib import request
 from datetime import datetime
 import time
-import math
-import smbus
-import sys
 
-def get_float(values, name, unit):
-    value = values.get(name)
-    if value:
-        try:
-            if value[2] == unit:
-                return float(value[1])
-        except ValueError:
-            return None
-
-##### parse 
+##### parse p1 lines
 
 c = 0
 input = []
@@ -87,7 +73,17 @@ def parse(s):
     # print(list)
     return (name, list)
 
-#Set COM port config
+def parse_lines(lines_read):
+    while True:
+        for lines in lines_read:
+            for line in lines:
+                try:
+                    yield(parse(line))
+                except ValueError:
+                    pass
+
+##### serial p1 communication
+
 ser = serial.Serial()
 ser.baudrate = 115200
 ser.bytesize=serial.EIGHTBITS
@@ -98,11 +94,10 @@ ser.rtscts=0
 ser.timeout=20
 ser.port="/dev/ttyUSB0"
 
-#Open COM port
 try:
     ser.open()
 except:
-    sys.exit (f"error opening {ser.name}")
+    sys.exit(f"error opening serial port {ser.name}")
 
 crc=0
 
@@ -124,7 +119,7 @@ def read_p1():
         try:
             p1_raw = ser.readline()
         except:
-            sys.exit ("Seriele poort %s kan niet gelezen worden. Aaaaaaaaarch." % ser.name )
+            sys.exit(f"cannot read serial port {ser.name}")
         p1_str=p1_raw.decode('ascii')
         p1_line = p1_str.strip()
         # print(p1_raw)
@@ -132,7 +127,7 @@ def read_p1():
             calc_crc_telegram([ord("!")])
             if state == 2:
                 # happy: all data ssen
-                #print(f"telegram {crc:x} {p1_line[1:].strip()} {p1_line} ")
+                # print(f"telegram {crc:x} {p1_line[1:].strip()} {p1_line} ")
                 state = 0
                 crc = 0
                 yield lines
@@ -165,23 +160,17 @@ def read_p1():
                     state = 0
                     crc = 0
 
-def lines(lines_read):
-    while True:
-        for lines in lines_read:
-            for line in lines:
-                try:
-                    yield(parse(line))
-                except ValueError:
-                    pass
+##### read-out interesting values from parsed p1 lines 
 
 names = ['1-0:1.7.0', '1-0:2.7.0']
 vals = {}
 
-
 def readouts():
     global vals
+    for name in names:
+        vals[name] = None
     lines_read = read_p1()
-    for (name, values) in lines(lines_read):
+    for (name, values) in parse_lines(lines_read):
         if name in names:
             if len(values) == 1:
                value = values[0]
@@ -193,10 +182,6 @@ def readouts():
         yield(vals)
 
 ##### omnik
-
-#now = float(now) / 1000  
-#today = float(today) / 100  # 1/100's of kWh
-#total = float(total) / 10  # convert 1/10's to 1/100; of kW0
 
 # yuck, but works: https://github.com/Woutrrr/Omnik-Data-Logger/issues/27
 url = "http://10.1.0.104/js/status.js"
@@ -224,12 +209,11 @@ client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
 for t in zip(readouts(), read_omnik()):
    ps = t[1][0]
-   pr = t[0].get('1-0:2.7.0', None)
-   pd = t[0].get('1-0:1.7.0', None)
+   pr = t[0].get('1-0:2.7.0')
+   pd = t[0].get('1-0:1.7.0')
    print(t)
    if pr != None  and pd != None:
-       pl = pr - pd
-       pu = pl + ps
-       msg=f"pl={pl} ps={ps} pu={pu}"
+       pl = pd - pr
+       msg=f"pl={pl} ps={ps}"
        client.sendto(msg.encode('UTF-8'), ('<broadcast>', 37020))
    time.sleep(1)
