@@ -8,6 +8,7 @@ import time
 
 ## parse p1 lines
 
+
 class Parser:
 
     def __init__(self):
@@ -82,83 +83,82 @@ class Parser:
 
 ##### serial p1 communication
 
-ser = serial.Serial()
-ser.baudrate = 115200
-ser.bytesize = serial.EIGHTBITS
-ser.parity = serial.PARITY_NONE
-ser.stopbits = serial.STOPBITS_ONE
-ser.xonxoff = 0
-ser.rtscts = 0
-ser.timeout = 20
-ser.port = "/dev/ttyUSB0"
+class P1Serial:
+    def _init__(self):
+        self.ser = serial.Serial()
+        self.ser.baudrate = 115200
+        self.ser.bytesize = serial.EIGHTBITS
+        self.ser.parity = serial.PARITY_NONE
+        self.ser.stopbits = serial.STOPBITS_ONE
+        self.ser.xonxoff = 0
+        self.ser.rtscts = 0
+        self.ser.timeout = 20
+        self.ser.port = "/dev/ttyUSB0"
+        self.crc = 0
 
-try:
-    ser.open()
-except:
-    sys.exit(f"error opening serial port {ser.name}")
-
-crc = 0
-
-
-def calc_crc_telegram(telegram):
-    global crc
-    for x in telegram:
-        crc = crc ^ x
-        for y in range(8):
-            if (crc & 1) != 0:
-                crc = crc >> 1
-                crc = crc ^ (int("0xA001", 16))
-            else:
-                crc = crc >> 1
-
-
-def read_p1():
-    state = 0
-    lines = []
-    while True:
         try:
-            p1_raw = ser.readline()
+            self.ser.open()
         except:
-            sys.exit(f"cannot read serial port {ser.name}")
-        p1_str = p1_raw.decode('ascii')
-        p1_line = p1_str.strip()
-        # print(p1_raw)
-        if p1_line.startswith("!"):
-            calc_crc_telegram([ord("!")])
-            if state == 2:
-                # happy: all data ssen
-                # print(f"telegram {crc:x} {p1_line[1:].strip()} {p1_line} ")
-                state = 0
-                crc = 0
-                yield lines
-            else:
-                # unhappy, reset
-                # print("reset, unexpected crc line")
-                state = 0
-                crc = 0
-        else:
-            calc_crc_telegram(p1_raw)
-            if p1_line == "":
-                if state == 1:
-                    # happy: data starts after this
-                    state = 2
+            sys.exit(f"error opening serial port {self.ser.name}")
+
+
+    def calc_crc_telegram(self, telegram):
+        for x in telegram:
+            self.crc = self.crc ^ x
+            for y in range(8):
+                if (self.crc & 1) != 0:
+                    self.crc = self.crc >> 1
+                    self.crc = self.crc ^ (int("0xA001", 16))
                 else:
-                    # unhappy: reset
-                    # print("reset, unexpected empty line")
-                    state = 0
-                    crc = 0
-            elif p1_line.startswith("/"):
-                # happy: start of telegram
-                state = 1
-                lines = []
-            else:
+                    self.crc = self.crc >> 1
+
+    def read_p1(self):
+        state = 0
+        lines = []
+        while True:
+            try:
+                p1_raw = self.ser.readline()
+            except:
+                sys.exit(f"cannot read serial port {self.ser.name}")
+            p1_str = p1_raw.decode('ascii')
+            p1_line = p1_str.strip()
+            # print(p1_raw)
+            if p1_line.startswith("!"):
+                self.calc_crc_telegram([ord("!")])
                 if state == 2:
-                    # happy, data line
-                    lines.append(p1_line)
-                else:
-                    # print("reset, unexpected data line")
+                    # happy: all data ssen
+                    # print(f"telegram {crc:x} {p1_line[1:].strip()} {p1_line} ")
                     state = 0
                     crc = 0
+                    yield lines
+                else:
+                    # unhappy, reset
+                    # print("reset, unexpected crc line")
+                    state = 0
+                    crc = 0
+            else:
+                self.calc_crc_telegram(p1_raw)
+                if p1_line == "":
+                    if state == 1:
+                        # happy: data starts after this
+                        state = 2
+                    else:
+                        # unhappy: reset
+                        # print("reset, unexpected empty line")
+                        state = 0
+                        crc = 0
+                elif p1_line.startswith("/"):
+                    # happy: start of telegram
+                    state = 1
+                    lines = []
+                else:
+                    if state == 2:
+                        # happy, data line
+                        lines.append(p1_line)
+                    else:
+                        # print("reset, unexpected data line")
+                        state = 0
+                        crc = 0
 
 
 ##### read-out interesting values from parsed p1 lines 
@@ -171,7 +171,8 @@ def readouts():
     global vals
     for name in names:
         vals[name] = None
-    lines_read = read_p1()
+    p1_serial = P1Serial()
+    lines_read = p1_serial.read_p1()
     parser = Parser()
     for (name, values) in parser.parse_lines(lines_read):
         if name in names:
@@ -182,7 +183,7 @@ def readouts():
                     vals[name] = fvalue
                 except ValueError:
                     pass
-        yield (vals)
+        yield vals
 
 
 ##### omnik
