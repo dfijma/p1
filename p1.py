@@ -34,7 +34,7 @@ class Parser:
             start_unit = self.c
             while not self.cur() in ['(', ')', chr(0)]:
                 self.skip()
-            unit = input[start_unit:self.c]
+            unit = self.input[start_unit:self.c]
 
         if unit_allowed:
             return self.input[start:end_val], unit
