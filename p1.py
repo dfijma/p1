@@ -84,7 +84,7 @@ class Parser:
 ##### serial p1 communication
 
 class P1Serial:
-    def _init__(self):
+    def __init__(self):
         self.ser = serial.Serial()
         self.ser.baudrate = 115200
         self.ser.bytesize = serial.EIGHTBITS
@@ -95,7 +95,6 @@ class P1Serial:
         self.ser.timeout = 20
         self.ser.port = "/dev/ttyUSB0"
         self.crc = 0
-
         try:
             self.ser.open()
         except:
