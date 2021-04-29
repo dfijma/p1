@@ -215,13 +215,15 @@ def run():
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     for t in zip(readouts(), read_omnik()):
-        ps = t[1][0]
-        pr = t[0].get('1-0:2.7.0')
-        pd = t[0].get('1-0:1.7.0')
-        print(t)
+        print(t[1])
+        ps = t[1][0] # solar power
+        yt = t[1][1] # yield today
+        ya = t[1][2] # yield all time
+        pr = t[0].get('1-0:2.7.0') # power received
+        pd = t[0].get('1-0:1.7.0') # power delivered
         if pr is not None and pd is not None:
-            pl = pd - pr
-            msg = f"pl={pl} ps={ps}"
+            pl = pd - pr # power line (negative is received back)
+            msg = f"pl={pl} ps={ps} yt={yt} ya={ya}"
             client.sendto(msg.encode('UTF-8'), ('<broadcast>', 37020))
         time.sleep(1)
 
